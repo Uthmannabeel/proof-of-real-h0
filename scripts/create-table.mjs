@@ -33,13 +33,14 @@ async function main() {
     new CreateTableCommand({
       TableName,
       BillingMode: "PAY_PER_REQUEST",
+      // Base-table pk/sk carry both REG#<id> records and BAND#<i:val> LSH
+      // pointers, so near-match needs no GSI. GSI1 = exact content lookup,
+      // GSI3 = recent ledger.
       AttributeDefinitions: [
         { AttributeName: "pk", AttributeType: "S" },
         { AttributeName: "sk", AttributeType: "S" },
         { AttributeName: "gsi1pk", AttributeType: "S" },
         { AttributeName: "gsi1sk", AttributeType: "S" },
-        { AttributeName: "gsi2pk", AttributeType: "S" },
-        { AttributeName: "gsi2sk", AttributeType: "S" },
         { AttributeName: "gsi3pk", AttributeType: "S" },
         { AttributeName: "gsi3sk", AttributeType: "S" },
       ],
@@ -49,7 +50,6 @@ async function main() {
       ],
       GlobalSecondaryIndexes: [
         gsi("GSI1", "gsi1pk", "gsi1sk"),
-        gsi("GSI2", "gsi2pk", "gsi2sk"),
         gsi("GSI3", "gsi3pk", "gsi3sk"),
       ],
     }),

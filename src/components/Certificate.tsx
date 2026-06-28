@@ -45,10 +45,24 @@ export function Certificate({ registration, stamp }: CertificateProps) {
         <Field label="Size" value={formatBytes(registration.bytes)} />
       </dl>
 
-      <footer className="mono text-[0.7rem] text-[var(--color-ink-faint)] mt-6 pt-4 doc-rule border-b-0 border-t">
-        Provenance trail:{" "}
-        {registration.provenance.map((p) => p.action).join(" → ")} · entry sealed at{" "}
-        {new Date(registration.createdAt).toISOString()}
+      <footer className="mt-6 pt-4 doc-rule border-b-0 border-t space-y-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.78rem]">
+          {registration.sealAlg === "ed25519" ? (
+            <span className="mono text-[var(--color-stamp-green)] font-bold">✓ Sealed · Ed25519</span>
+          ) : (
+            <span className="mono text-[var(--color-ink-faint)]">Unsealed</span>
+          )}
+          <span className="mono text-[var(--color-ink-faint)]">
+            record {shortHash(registration.recordHash, 6, 4)}
+            {registration.prevHash
+              ? ` ← prev ${shortHash(registration.prevHash, 6, 4)}`
+              : " · genesis block"}
+          </span>
+        </div>
+        <p className="mono text-[0.7rem] text-[var(--color-ink-faint)]">
+          Provenance: {registration.provenance.map((p) => p.action).join(" → ")} ·{" "}
+          {new Date(registration.createdAt).toISOString()}
+        </p>
       </footer>
     </article>
   );

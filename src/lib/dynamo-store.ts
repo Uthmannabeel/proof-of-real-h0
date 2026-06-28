@@ -1,35 +1,40 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
+  BatchWriteCommand,
   DynamoDBDocumentClient,
   GetCommand,
-  PutCommand,
   QueryCommand,
-  ScanCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { Registration } from "./types";
 import type { NearMatch, ProvenanceStore } from "./store";
-import { hammingDistance } from "./hash";
+import { bands, hammingDistance } from "./hash";
 
 const TABLE = process.env.DYNAMODB_TABLE ?? "proof-of-real";
-const SCAN_FALLBACK_LIMIT = 500;
 
-interface StoredItem {
+interface MainItem {
   pk: string;
   sk: string;
   gsi1pk: string;
   gsi1sk: string;
-  gsi2pk: string;
-  gsi2sk: string;
   gsi3pk: string;
   gsi3sk: string;
   record: Registration;
 }
 
+interface BandItem {
+  pk: string; // BAND#<i>:<value>
+  sk: string; // REG#<id>
+  id: string;
+  phash: string;
+}
+
 /**
- * DynamoDB-backed registry. Single table with three GSIs:
- *   GSI1 (gsi1pk=CONTENT#<sha256>)  -> exact-original lookup, O(1)
- *   GSI2 (gsi2pk=BUCKET#<phash12b>) -> perceptual candidates by fingerprint bucket
- *   GSI3 (gsi3pk=ALL)               -> recent registrations, time-ordered
+ * DynamoDB-backed registry. Single table:
+ *   REG#<id>     (sk=META)  — full record; GSI1 (CONTENT#) exact, GSI3 (ALL) recent
+ *   BAND#<i:val> (sk=REG#)  — LSH band pointers for scalable near-match
+ *
+ * Near-match is a fixed number of point queries (one per band) + a getById,
+ * never a table scan — so it scales with traffic, not with registry size.
  */
 export class DynamoStore implements ProvenanceStore {
   private readonly doc: DynamoDBDocumentClient;
@@ -42,25 +47,31 @@ export class DynamoStore implements ProvenanceStore {
   }
 
   async put(record: Registration): Promise<void> {
-    const item: StoredItem = {
+    const main: MainItem = {
       pk: `REG#${record.id}`,
       sk: "META",
       gsi1pk: `CONTENT#${record.contentHash}`,
       gsi1sk: record.createdAt,
-      gsi2pk: `BUCKET#${record.phashBucket}`,
-      gsi2sk: record.createdAt,
       gsi3pk: "ALL",
       gsi3sk: record.createdAt,
       record,
     };
-    await this.doc.send(new PutCommand({ TableName: TABLE, Item: item }));
+    const bandItems: BandItem[] = bands(record.phash).map((b) => ({
+      pk: `BAND#${b}`,
+      sk: `REG#${record.id}`,
+      id: record.id,
+      phash: record.phash,
+    }));
+
+    const requests = [main, ...bandItems].map((Item) => ({ PutRequest: { Item } }));
+    await this.doc.send(new BatchWriteCommand({ RequestItems: { [TABLE]: requests } }));
   }
 
   async getById(id: string): Promise<Registration | null> {
     const res = await this.doc.send(
       new GetCommand({ TableName: TABLE, Key: { pk: `REG#${id}`, sk: "META" } }),
     );
-    return res.Item ? (res.Item as StoredItem).record : null;
+    return res.Item ? (res.Item as MainItem).record : null;
   }
 
   async findByContentHash(contentHash: string): Promise<Registration | null> {
@@ -73,19 +84,45 @@ export class DynamoStore implements ProvenanceStore {
         Limit: 1,
       }),
     );
-    const item = res.Items?.[0] as StoredItem | undefined;
+    const item = res.Items?.[0] as MainItem | undefined;
     return item ? item.record : null;
   }
 
   async findNearest(phash: string, maxDistance: number): Promise<NearMatch | null> {
-    const bucket = phash.slice(0, 3);
-    const candidates = await this.queryBucket(bucket);
-    const best = pickNearest(phash, candidates, maxDistance);
-    if (best) return best;
+    // One point query per band, in parallel — bounded work, no scan.
+    const perBand = await Promise.all(
+      bands(phash).map((b) =>
+        this.doc.send(
+          new QueryCommand({
+            TableName: TABLE,
+            KeyConditionExpression: "pk = :pk",
+            ExpressionAttributeValues: { ":pk": `BAND#${b}` },
+          }),
+        ),
+      ),
+    );
 
-    // Bucket miss (an edit shifted the fingerprint prefix): bounded scan fallback.
-    const scanned = await this.scanSome();
-    return pickNearest(phash, scanned, maxDistance);
+    const candidates = new Map<string, string>(); // id -> phash
+    for (const res of perBand) {
+      for (const raw of res.Items ?? []) {
+        const item = raw as BandItem;
+        if (!candidates.has(item.id)) candidates.set(item.id, item.phash);
+      }
+    }
+
+    let bestId: string | null = null;
+    let bestDistance = Number.MAX_SAFE_INTEGER;
+    for (const [id, candidatePhash] of candidates) {
+      const distance = hammingDistance(phash, candidatePhash);
+      if (distance <= maxDistance && distance < bestDistance) {
+        bestDistance = distance;
+        bestId = id;
+      }
+    }
+
+    if (bestId === null) return null;
+    const record = await this.getById(bestId);
+    return record ? { record, distance: bestDistance } : null;
   }
 
   async list(limit: number): Promise<Registration[]> {
@@ -99,42 +136,6 @@ export class DynamoStore implements ProvenanceStore {
         Limit: limit,
       }),
     );
-    return (res.Items ?? []).map((i) => (i as StoredItem).record);
+    return (res.Items ?? []).map((i) => (i as MainItem).record);
   }
-
-  private async queryBucket(bucket: string): Promise<Registration[]> {
-    const res = await this.doc.send(
-      new QueryCommand({
-        TableName: TABLE,
-        IndexName: "GSI2",
-        KeyConditionExpression: "gsi2pk = :pk",
-        ExpressionAttributeValues: { ":pk": `BUCKET#${bucket}` },
-      }),
-    );
-    return (res.Items ?? []).map((i) => (i as StoredItem).record);
-  }
-
-  private async scanSome(): Promise<Registration[]> {
-    const res = await this.doc.send(
-      new ScanCommand({ TableName: TABLE, Limit: SCAN_FALLBACK_LIMIT }),
-    );
-    return (res.Items ?? [])
-      .filter((i) => (i as StoredItem).sk === "META")
-      .map((i) => (i as StoredItem).record);
-  }
-}
-
-function pickNearest(
-  phash: string,
-  records: Registration[],
-  maxDistance: number,
-): NearMatch | null {
-  let best: NearMatch | null = null;
-  for (const record of records) {
-    const distance = hammingDistance(phash, record.phash);
-    if (distance <= maxDistance && (best === null || distance < best.distance)) {
-      best = { record, distance };
-    }
-  }
-  return best;
 }

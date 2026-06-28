@@ -44,6 +44,20 @@ export async function imageDimensions(
   }
 }
 
+/**
+ * LSH banding: split the fingerprint into `bandCount` segments. Two images with
+ * a small Hamming distance share at least one identical band with high
+ * probability, so near-match becomes a few point lookups instead of a scan.
+ */
+export function bands(phash: string, bandCount = 8): string[] {
+  const size = Math.max(1, Math.floor(phash.length / bandCount));
+  const out: string[] = [];
+  for (let i = 0; i < bandCount; i++) {
+    out.push(`${i}:${phash.slice(i * size, i * size + size)}`);
+  }
+  return out;
+}
+
 /** Number of differing bits between two equal-length hex fingerprints (0-64). */
 export function hammingDistance(a: string, b: string): number {
   if (a.length !== b.length) return Number.MAX_SAFE_INTEGER;

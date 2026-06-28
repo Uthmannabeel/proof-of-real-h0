@@ -20,11 +20,16 @@ export interface Registration {
   contentHash: string;
   /** 64-bit perceptual (dHash) fingerprint, 16 hex chars — survives re-encoding/edits. */
   phash: string;
-  /** First 12 bits of the phash, used as a DynamoDB bucket key for candidate lookup. */
-  phashBucket: string;
   width: number | null;
   height: number | null;
   bytes: number;
   createdAt: string; // ISO timestamp
   provenance: ProvenanceEntry[];
+
+  // Tamper-evidence: each record is hash-chained to the previous one and
+  // cryptographically sealed by the registry key.
+  prevHash: string | null; // recordHash of the previous registration
+  recordHash: string; // SHA-256 of the canonical record (incl. prevHash)
+  seal: string; // base64 Ed25519 signature over the canonical record
+  sealAlg: "ed25519" | "none";
 }

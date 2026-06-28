@@ -25,6 +25,14 @@ Every registration stores two fingerprints in **DynamoDB**:
 
 This is deliberately a **registry**, not a "magic AI deepfake detector." It proves provenance for media that was registered — an honest, verifiable guarantee — rather than guessing at images it has never seen.
 
+### Tamper-evidence (why you can trust the registry)
+
+Every registration is **cryptographically sealed** with the registry's Ed25519 key and **hash-chained** to the previous record (`prevHash` → `recordHash`). `GET /api/ledger/verify` recomputes every record's hash and signature and checks the chain — so altering any stored field (or inserting/removing a record) is detectable. The registry can't quietly rewrite history.
+
+### Scalable near-match (LSH)
+
+The perceptual fingerprint is split into **8 bands**; each registration writes one lightweight `BAND#<i:value>` pointer per band on the base table. Verify issues one **point query per band in parallel**, unions the candidates, and Hamming-ranks them. Near-match is therefore a fixed number of point lookups — it scales with traffic, **not a table scan** over the whole registry.
+
 ## Architecture
 
 ```
@@ -38,8 +46,8 @@ Browser ──upload──▶ Next.js API routes (/api/register, /api/verify)
 
 **DynamoDB single-table design** (`scripts/create-table.mjs`):
 
-- `GSI1` (`CONTENT#<sha256>`) — O(1) exact-original lookup
-- `GSI2` (`BUCKET#<phash-prefix>`) — perceptual candidates by fingerprint bucket, then Hamming-ranked
+- `REG#<id>` items + `GSI1` (`CONTENT#<sha256>`) — O(1) exact-original lookup
+- `BAND#<i:value>` items on the base table — LSH band pointers; near-match = one point query per band, no scan, no extra GSI
 - `GSI3` (`ALL`) — recent registrations for the public ledger
 
 The storage backend swaps via the `DATA_BACKEND` env var with **no call-site changes** (Repository pattern), so the app runs identically with or without AWS.
@@ -49,6 +57,12 @@ The storage backend swaps via the `DATA_BACKEND` env var with **no call-site cha
 ```bash
 npm install
 npm run dev          # http://localhost:3000  (uses the local JSON backend)
+```
+
+Run the unit tests (hashing, LSH banding, crypto seal + tamper):
+
+```bash
+npm test
 ```
 
 Generate test fixtures and smoke-test:
@@ -81,7 +95,7 @@ Next.js 16 (App Router, React 19) · TypeScript · Tailwind v4 · `sharp` · AWS
 
 ## Judging-criteria fit
 
-- **Technological implementation** — real single-table DynamoDB design with three purpose-built GSIs; clean Repository abstraction; Node-runtime image hashing.
+- **Technological implementation** — single-table DynamoDB with LSH band pointers for scan-free near-match, Ed25519-sealed hash-chained records for tamper-evidence, a clean Repository abstraction, and Node-runtime image hashing.
 - **Design** — a deliberate "official document / registry" visual system, not a template.
 - **Impact** — media authenticity is the defining trust problem of the synthetic-media era.
 - **Originality** — a *public provenance registry* with honest, checkable guarantees rather than an opaque detector.

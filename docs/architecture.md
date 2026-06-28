@@ -38,10 +38,18 @@ flowchart TD
 |----------------|-------|-----|
 | Get by id | base table | `pk=REG#<id>`, `sk=META` |
 | Exact original | GSI1 | `gsi1pk=CONTENT#<sha256>` |
-| Perceptual candidates | GSI2 | `gsi2pk=BUCKET#<phash[0:3]>` |
+| Perceptual candidates (LSH) | base table | `pk=BAND#<i:value>`, one item per band |
 | Recent ledger | GSI3 | `gsi3pk=ALL`, sorted by `gsi3sk=createdAt` |
 
 Billing is `PAY_PER_REQUEST`; no capacity planning needed for a hackathon, and it scales to production traffic without change.
+
+## Scalable near-match (LSH banding)
+
+The 64-bit dHash is split into 8 bands. Each registration writes 8 lightweight `BAND#<i:value>` pointer items. Verify runs **one point query per band, in parallel**, unions the candidate ids, and Hamming-ranks them — then fetches only the winning record. Cost is bounded by the number of bands and candidates per band, never by registry size, so there is no table scan on the hot path.
+
+## Tamper-evidence (seal + hash chain)
+
+Each registration is hash-chained (`prevHash` = previous record's `recordHash`) and Ed25519-sealed by the registry key over a canonical projection of its fields. `GET /api/ledger/verify` recomputes each `recordHash`, verifies each seal against the public key, and checks chain linkage — making any field edit, insertion, reorder, or deletion detectable. Keys are supplied via `REGISTRY_PRIVATE_KEY` / `REGISTRY_PUBLIC_KEY` (base64 PEM); generate with `scripts/gen-registry-key.mjs`.
 
 ## Why these choices
 
