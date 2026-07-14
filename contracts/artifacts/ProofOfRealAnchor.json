@@ -1,0 +1,206 @@
+{
+  "contractName": "ProofOfRealAnchor",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "registrar_",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [],
+      "name": "AlreadyAnchored",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NoAnchors",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "NotRegistrar",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ShrinkingChain",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "bytes32",
+          "name": "chainHead",
+          "type": "bytes32"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "recordCount",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "index",
+          "type": "uint256"
+        }
+      ],
+      "name": "Anchored",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "chainHead",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "recordCount",
+          "type": "uint64"
+        }
+      ],
+      "name": "anchor",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "index",
+          "type": "uint256"
+        }
+      ],
+      "name": "anchorAt",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "chainHead",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "recordCount",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "anchoredAt",
+              "type": "uint64"
+            }
+          ],
+          "internalType": "struct ProofOfRealAnchor.Anchor",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "anchorCount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "bytes32",
+          "name": "chainHead",
+          "type": "bytes32"
+        }
+      ],
+      "name": "isAnchored",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "anchored",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint64",
+          "name": "anchoredAt",
+          "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "recordCount",
+          "type": "uint64"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "latestAnchor",
+      "outputs": [
+        {
+          "components": [
+            {
+              "internalType": "bytes32",
+              "name": "chainHead",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "uint64",
+              "name": "recordCount",
+              "type": "uint64"
+            },
+            {
+              "internalType": "uint64",
+              "name": "anchoredAt",
+              "type": "uint64"
+            }
+          ],
+          "internalType": "struct ProofOfRealAnchor.Anchor",
+          "name": "",
+          "type": "tuple"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "registrar",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60a0604052348015600f57600080fd5b50604051610662380380610662833981016040819052602c91603c565b6001600160a01b0316608052606a565b600060208284031215604d57600080fd5b81516001600160a01b0381168114606357600080fd5b9392505050565b6080516105d761008b6000396000818160c0015261031301526105d76000f3fe608060405234801561001057600080fd5b50600436106100625760003560e01c80631699496014610067578063245c88d8146100b35780632b20e397146100bb57806334f96c8c146100fa5780634f0b58011461010b578063db2c4aca14610146575b600080fd5b61007a61007536600461050e565b61015b565b604080518251815260208084015167ffffffffffffffff9081169183019190915292820151909216908201526060015b60405180910390f35b61007a6101da565b6100e27f000000000000000000000000000000000000000000000000000000000000000081565b6040516001600160a01b0390911681526020016100aa565b6000546040519081526020016100aa565b61011e61011936600461050e565b610286565b60408051931515845267ffffffffffffffff92831660208501529116908201526060016100aa565b610159610154366004610527565b610308565b005b60408051606081018252600080825260208201819052918101919091526000828154811061018b5761018b610564565b6000918252602091829020604080516060810182526002909302909101805483526001015467ffffffffffffffff80821694840194909452600160401b90049092169181019190915292915050565b6040805160608101825260008082526020820181905291810182905281549091036102185760405163d74cde9d60e01b815260040160405180910390fd5b600080546102289060019061057a565b8154811061023857610238610564565b6000918252602091829020604080516060810182526002909302909101805483526001015467ffffffffffffffff80821694840194909452600160401b900490921691810191909152919050565b600081815260016020526040812054819081908082036102b157600080600093509350935050610301565b6000806102bf60018461057a565b815481106102cf576102cf610564565b60009182526020909120600160029092020181015490955067ffffffffffffffff600160401b82048116955016925050505b9193909250565b336001600160a01b037f0000000000000000000000000000000000000000000000000000000000000000161461035157604051632ad9535160e01b815260040160405180910390fd5b6000828152600160205260409020541561037e5760405163a0094ce360e01b815260040160405180910390fd5b600054158015906103d057506000805461039a9060019061057a565b815481106103aa576103aa610564565b600091825260209091206001600290920201015467ffffffffffffffff90811690821611155b156103ee5760405163e15f86e360e01b815260040160405180910390fd5b6040805160608101825283815267ffffffffffffffff80841660208084019182524283168486019081526000805460018181018355828052965160029091027f290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e56381019190915593517f290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e564909401805492518616600160401b026fffffffffffffffffffffffffffffffff199093169490951693909317179092558054868252918390529290922082905583917fa42ba76627f3ba3b6eec410fc07138c5d8a423c71e0b4f23b0f7808088873d9b9184916104e7919061057a565b6040805167ffffffffffffffff909316835260208301919091520160405180910390a25050565b60006020828403121561052057600080fd5b5035919050565b6000806040838503121561053a57600080fd5b82359150602083013567ffffffffffffffff8116811461055957600080fd5b809150509250929050565b634e487b7160e01b600052603260045260246000fd5b8181038181111561059b57634e487b7160e01b600052601160045260246000fd5b9291505056fea2646970667358221220f3c27cfdc24b99df1965ba9d27cac86716159cf09110b18c1842a3955bfd62eb64736f6c63430008240033",
+  "compiler": {
+    "solc": "0.8.36+commit.8a079791.Emscripten.clang",
+    "evmVersion": "london",
+    "optimizer": true
+  }
+}
