@@ -65,3 +65,13 @@ const outPath = join(root, "contracts", "deployment.coston2.json");
 writeFileSync(outPath, JSON.stringify(deployment, null, 2));
 console.log(`Deployment record → ${outPath}`);
 console.log(`Explorer: ${deployment.explorer}`);
+
+// Wire the app up: set FLARE_ANCHOR_ADDRESS in .env.local (add or replace).
+const envPath = join(root, ".env.local");
+const envContent = readFileSync(envPath, "utf8");
+const line = `FLARE_ANCHOR_ADDRESS=${address}`;
+const updated = /^FLARE_ANCHOR_ADDRESS=.*$/m.test(envContent)
+  ? envContent.replace(/^FLARE_ANCHOR_ADDRESS=.*$/m, line)
+  : envContent + `${line}\n`;
+writeFileSync(envPath, updated);
+console.log("FLARE_ANCHOR_ADDRESS saved to .env.local — the app can anchor now.");
