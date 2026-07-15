@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Registration } from "@/lib/types";
+import type { EnclaveInfo, Registration } from "@/lib/types";
 import type { Verification, RegisterResult } from "@/lib/registry";
 import type { ApiResponse } from "@/lib/api";
 import { UploadCard } from "./UploadCard";
@@ -11,6 +11,9 @@ import { Ledger } from "./Ledger";
 import { AnchorPanel } from "./AnchorPanel";
 
 type Tab = "register" | "verify";
+
+/** When set, images go DIRECTLY to the confidential verifier — never to our server. */
+const ENCLAVE_URL = (process.env.NEXT_PUBLIC_ENCLAVE_URL ?? "").replace(/\/$/, "");
 
 /** Bundled demo images so a first-time visitor can reach a verdict in seconds. */
 const SAMPLES = [
@@ -29,6 +32,7 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
   const [error, setError] = useState<string | null>(null);
   const [registerResult, setRegisterResult] = useState<RegisterResult | null>(null);
   const [verifyResult, setVerifyResult] = useState<Verification | null>(null);
+  const [enclaveInfo, setEnclaveInfo] = useState<EnclaveInfo | null>(null);
   const [ledger, setLedger] = useState<Registration[]>(initialLedger);
 
   const selectFile = (next: File | null) => {
@@ -40,6 +44,7 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
     setError(null);
     setRegisterResult(null);
     setVerifyResult(null);
+    setEnclaveInfo(null);
   };
 
   const switchTab = (next: Tab) => {
@@ -47,6 +52,7 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
     setError(null);
     setRegisterResult(null);
     setVerifyResult(null);
+    setEnclaveInfo(null);
   };
 
   async function refreshLedger() {
@@ -82,10 +88,22 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
         if (!body.success || !body.data) throw new Error(body.error ?? "Registration failed.");
         setRegisterResult(body.data);
         await refreshLedger();
+      } else if (ENCLAVE_URL) {
+        // Confidential path: the image goes straight to the enclave, not our server.
+        const res = await fetch(`${ENCLAVE_URL}/verify`, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        const body = (await res.json()) as ApiResponse<Verification & { enclave: EnclaveInfo }>;
+        if (!body.success || !body.data) throw new Error(body.error ?? "Verification failed.");
+        setVerifyResult(body.data);
+        setEnclaveInfo(body.data.enclave ?? null);
       } else {
         const body = await postForm<Verification>("/api/verify", form);
         if (!body.success || !body.data) throw new Error(body.error ?? "Verification failed.");
         setVerifyResult(body.data);
+        setEnclaveInfo(null);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -170,7 +188,7 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
           </div>
         )}
 
-        {verifyResult && <VerifyResult result={verifyResult} />}
+        {verifyResult && <VerifyResult result={verifyResult} enclave={enclaveInfo} />}
 
         {!registerResult && !verifyResult && (
           <div className="space-y-5">

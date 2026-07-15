@@ -1,4 +1,5 @@
 import type { Verification } from "@/lib/registry";
+import type { EnclaveInfo } from "@/lib/types";
 import { Certificate } from "./Certificate";
 import { AnchorPanel } from "./AnchorPanel";
 
@@ -33,7 +34,7 @@ interface EvidenceRow {
 }
 
 /** Every check the verifier ran, with its concrete finding — verdicts must be explainable. */
-function buildEvidence(result: Verification): EvidenceRow[] {
+function buildEvidence(result: Verification, enclave: EnclaveInfo | null): EvidenceRow[] {
   const rows: EvidenceRow[] = [
     {
       check: "Exact bytes · SHA-256",
@@ -54,6 +55,16 @@ function buildEvidence(result: Verification): EvidenceRow[] {
       pass: result.distance !== null,
     },
   ];
+
+  rows.push({
+    check: "Confidential compute · TEE attestation",
+    finding: enclave?.attested
+      ? `verified inside Google Confidential Space${enclave.hwModel ? ` (${enclave.hwModel})` : ""} — attestation nonce-bound to this file's SHA-256; the image never left the enclave`
+      : enclave
+        ? "verifier ran outside Confidential Space (dev mode) — no hardware attestation issued"
+        : "verified on the registry server — confidential enclave not configured on this deployment",
+    pass: enclave?.attested ? true : null,
+  });
 
   if (result.registration) {
     rows.push({
@@ -76,9 +87,15 @@ function buildEvidence(result: Verification): EvidenceRow[] {
   return rows;
 }
 
-export function VerifyResult({ result }: { result: Verification }) {
+export function VerifyResult({
+  result,
+  enclave = null,
+}: {
+  result: Verification;
+  enclave?: EnclaveInfo | null;
+}) {
   const copy = COPY[result.status];
-  const evidence = buildEvidence(result);
+  const evidence = buildEvidence(result, enclave);
 
   return (
     <div className="space-y-5">

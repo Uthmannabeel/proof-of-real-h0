@@ -1,0 +1,13 @@
+{
+  "name": "proof-of-real-enclave",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Confidential verifier for Proof of Real — runs in Google Cloud Confidential Space",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.35.2"
+  }
+}

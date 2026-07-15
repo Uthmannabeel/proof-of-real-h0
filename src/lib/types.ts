@@ -2,6 +2,22 @@
 
 export type MediaType = "image" | "video" | "audio";
 
+/**
+ * Provenance of a verification run inside the confidential enclave.
+ * `attested` means a Google-signed Confidential Space token was issued,
+ * nonce-bound to the verified file's SHA-256.
+ */
+export interface EnclaveInfo {
+  attested: boolean;
+  inConfidentialSpace: boolean;
+  nonceBound: boolean;
+  hwModel: string | null;
+  swName: string | null;
+  imageDigest: string | null;
+  issuedAt: string | null;
+  token: string | null;
+}
+
 /** A single entry in a registration's tamper-evident provenance trail. */
 export interface ProvenanceEntry {
   at: string; // ISO timestamp
