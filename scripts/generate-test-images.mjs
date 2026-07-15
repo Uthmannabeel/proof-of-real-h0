@@ -2,9 +2,10 @@
 //   original.png  — the registered original
 //   altered.png   — same image, brightness + slight blur (an "altered copy")
 //   unrelated.png — a completely different image (should not match)
+// Written to .data/fixtures (tests) AND public/samples (in-app demo buttons).
 import sharp from "sharp";
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, copyFile } from "node:fs/promises";
 
 const outDir = path.join(process.cwd(), ".data", "fixtures");
 await mkdir(outDir, { recursive: true });
@@ -58,4 +59,11 @@ await sharp({
   .png()
   .toFile(path.join(outDir, "unrelated.png"));
 
+const samplesDir = path.join(process.cwd(), "public", "samples");
+await mkdir(samplesDir, { recursive: true });
+for (const name of ["original.png", "altered.png", "unrelated.png"]) {
+  await copyFile(path.join(outDir, name), path.join(samplesDir, name));
+}
+
 console.log("Fixtures written to", outDir);
+console.log("Demo samples written to", samplesDir);

@@ -1,5 +1,6 @@
 import type { Verification } from "@/lib/registry";
 import { Certificate } from "./Certificate";
+import { AnchorPanel } from "./AnchorPanel";
 
 const COPY: Record<
   Verification["status"],
@@ -25,8 +26,59 @@ const COPY: Record<
   },
 };
 
+interface EvidenceRow {
+  check: string;
+  finding: string;
+  pass: boolean | null; // null = informational
+}
+
+/** Every check the verifier ran, with its concrete finding — verdicts must be explainable. */
+function buildEvidence(result: Verification): EvidenceRow[] {
+  const rows: EvidenceRow[] = [
+    {
+      check: "Exact bytes · SHA-256",
+      finding:
+        result.status === "registered-original"
+          ? "byte-for-byte match with a registered original"
+          : "no registered original has these exact bytes",
+      pass: result.status === "registered-original",
+    },
+    {
+      check: "Perceptual fingerprint · dHash",
+      finding:
+        result.distance === null
+          ? "no registered original within 10/64 bits — not a recognizable derivative"
+          : result.distance === 0
+            ? "identical fingerprint (0/64 bits differ)"
+            : `${result.distance}/64 bits differ from a registered original · ${(result.confidence * 100).toFixed(0)}% confidence`,
+      pass: result.distance !== null,
+    },
+  ];
+
+  if (result.registration) {
+    rows.push({
+      check: "Matched record seal · Ed25519",
+      finding:
+        result.registration.sealAlg === "ed25519"
+          ? "record is cryptographically sealed by the registry key"
+          : "record predates sealing — unsealed",
+      pass: result.registration.sealAlg === "ed25519",
+    });
+    rows.push({
+      check: "Hash-chain position",
+      finding: result.registration.prevHash
+        ? `chained to prior record ${result.registration.prevHash.slice(0, 10)}…`
+        : "genesis record of the ledger",
+      pass: null,
+    });
+  }
+
+  return rows;
+}
+
 export function VerifyResult({ result }: { result: Verification }) {
   const copy = COPY[result.status];
+  const evidence = buildEvidence(result);
 
   return (
     <div className="space-y-5">
@@ -40,12 +92,36 @@ export function VerifyResult({ result }: { result: Verification }) {
         </div>
         <p className="text-[var(--color-ink-soft)] mt-4 max-w-prose">{copy.body}</p>
 
-        {result.distance !== null && result.status === "likely-altered" && (
-          <p className="mono text-[0.78rem] text-[var(--color-ink-faint)] mt-4">
-            fingerprint distance: {result.distance}/64 · confidence{" "}
-            {(result.confidence * 100).toFixed(0)}%
-          </p>
-        )}
+        <div className="mt-6 doc-rule border-b-0 border-t pt-4">
+          <p className="eyebrow mb-3">Evidence — checks performed</p>
+          <ul className="space-y-2">
+            {evidence.map((row) => (
+              <li key={row.check} className="flex gap-3 items-baseline">
+                <span
+                  className={`mono text-[0.8rem] font-bold shrink-0 ${
+                    row.pass === null
+                      ? "text-[var(--color-ink-faint)]"
+                      : row.pass
+                        ? "text-[var(--color-stamp-green)]"
+                        : "text-[var(--color-stamp-red)]"
+                  }`}
+                >
+                  {row.pass === null ? "·" : row.pass ? "✓" : "✕"}
+                </span>
+                <span className="text-sm">
+                  <span className="mono text-[0.78rem] text-[var(--color-ink-faint)]">
+                    {row.check}
+                  </span>
+                  <br />
+                  {row.finding}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3">
+            <AnchorPanel compact />
+          </div>
+        </div>
       </div>
 
       {result.registration && (

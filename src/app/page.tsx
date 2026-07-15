@@ -17,7 +17,7 @@ const STEPS = [
   {
     n: "03",
     title: "Prove",
-    body: "Get a verdict: a registered original, an altered copy of one, or unknown. Provenance you can point to.",
+    body: "Get an evidence-backed verdict: original, altered copy, or unknown. The ledger's history is anchored on Flare, so not even we can rewrite it.",
   },
 ];
 
@@ -77,7 +77,7 @@ export default async function Home() {
       <footer className="border-t border-[var(--color-rule)]">
         <div className="max-w-5xl mx-auto px-6 py-6 mono text-[0.72rem] text-[var(--color-ink-faint)] flex flex-wrap gap-x-6 gap-y-2 justify-between">
           <span>Proof of Real · a public authenticity registry</span>
-          <span>SHA-256 + dHash · DynamoDB · Next.js on Vercel</span>
+          <span>SHA-256 + dHash · anchored on Flare Coston2 · Next.js</span>
         </div>
       </footer>
     </main>

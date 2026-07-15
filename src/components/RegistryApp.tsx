@@ -8,8 +8,16 @@ import { UploadCard } from "./UploadCard";
 import { Certificate } from "./Certificate";
 import { VerifyResult } from "./VerifyResult";
 import { Ledger } from "./Ledger";
+import { AnchorPanel } from "./AnchorPanel";
 
 type Tab = "register" | "verify";
+
+/** Bundled demo images so a first-time visitor can reach a verdict in seconds. */
+const SAMPLES = [
+  { file: "original.png", label: "Registered original" },
+  { file: "altered.png", label: "Altered copy" },
+  { file: "unrelated.png", label: "Unrelated image" },
+] as const;
 
 export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }) {
   const [tab, setTab] = useState<Tab>("register");
@@ -45,6 +53,17 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
     const res = await fetch("/api/registrations");
     const body = (await res.json()) as ApiResponse<Registration[]>;
     if (body.success && body.data) setLedger(body.data);
+  }
+
+  async function loadSample(name: string) {
+    try {
+      const res = await fetch(`/samples/${name}`);
+      if (!res.ok) throw new Error("Sample image unavailable.");
+      const blob = await res.blob();
+      selectFile(new File([blob], name, { type: "image/png" }));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not load the sample image.");
+    }
   }
 
   async function submit() {
@@ -98,6 +117,22 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
           }
         />
 
+        {tab === "verify" && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+            <span className="eyebrow">No image handy? Try:</span>
+            {SAMPLES.map((sample) => (
+              <button
+                key={sample.file}
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => loadSample(sample.file)}
+              >
+                {sample.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {tab === "register" && (
           <div className="mt-4 space-y-3">
             <LabeledInput label="Title" value={title} onChange={setTitle} placeholder="e.g. Sunrise over Harbor" />
@@ -138,9 +173,12 @@ export function RegistryApp({ initialLedger }: { initialLedger: Registration[] }
         {verifyResult && <VerifyResult result={verifyResult} />}
 
         {!registerResult && !verifyResult && (
-          <div>
-            <h2 className="font-serif text-xl mb-3">Public ledger</h2>
-            <Ledger records={ledger} />
+          <div className="space-y-5">
+            <div>
+              <h2 className="font-serif text-xl mb-3">Public ledger</h2>
+              <Ledger records={ledger} />
+            </div>
+            <AnchorPanel />
           </div>
         )}
       </section>
