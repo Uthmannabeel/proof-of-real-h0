@@ -17,8 +17,32 @@ const ANCHOR_ABI = [
 ];
 
 const DEFAULT_RPC = "https://coston2-api.flare.network/ext/C/rpc";
+const COSTON2_CHAIN_ID = 114;
 const EXPLORER_BASE = "https://coston2-explorer.flare.network";
 const MAX_LEDGER_SCAN = 1000;
+const RPC_TIMEOUT_MS = 15_000;
+
+/** Static network config: skips chain auto-detection, which retries forever when the RPC is unreachable. */
+function newProvider(): JsonRpcProvider {
+  return new JsonRpcProvider(process.env.FLARE_RPC_URL ?? DEFAULT_RPC, COSTON2_CHAIN_ID, {
+    staticNetwork: true,
+  });
+}
+
+/** Bound an on-chain call so an unreachable RPC degrades to an error instead of hanging requests. */
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label}: Flare RPC timed out.`)), RPC_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface AnchorInfo {
   chainHead: string; // 0x-prefixed bytes32
@@ -35,6 +59,8 @@ export interface AnchorStatus {
   currentCount: number;
   headAnchored: boolean;
   latest: AnchorInfo | null;
+  /** Set when the chain could not be reached — on-chain fields are then unknown, not "false". */
+  rpcError: string | null;
 }
 
 export interface AnchorReceipt {
@@ -64,16 +90,14 @@ export function anchorConfigured(): boolean {
 function readContract(): Contract | null {
   const address = process.env.FLARE_ANCHOR_ADDRESS;
   if (!address) return null;
-  const provider = new JsonRpcProvider(process.env.FLARE_RPC_URL ?? DEFAULT_RPC);
-  return new Contract(address, ANCHOR_ABI, provider);
+  return new Contract(address, ANCHOR_ABI, newProvider());
 }
 
 function writeContract(): Contract {
   const address = process.env.FLARE_ANCHOR_ADDRESS;
   const pk = process.env.FLARE_DEPLOYER_PRIVATE_KEY;
   if (!address || !pk) throw new Error("Flare anchoring is not configured.");
-  const provider = new JsonRpcProvider(process.env.FLARE_RPC_URL ?? DEFAULT_RPC);
-  return new Contract(address, ANCHOR_ABI, new Wallet(pk, provider));
+  return new Contract(address, ANCHOR_ABI, new Wallet(pk, newProvider()));
 }
 
 /** Live chain head of the local ledger (newest record's hash) plus record count. */
@@ -99,23 +123,28 @@ export async function getAnchorStatus(): Promise<AnchorStatus> {
     currentCount: count,
     headAnchored: false,
     latest: null,
+    rpcError: null,
   };
 
   const contract = readContract();
   if (!contract) return status;
 
-  const total: bigint = await contract.anchorCount();
-  if (Number(total) > 0) {
-    const latest = await contract.latestAnchor();
-    status.latest = {
-      chainHead: latest.chainHead,
-      recordCount: Number(latest.recordCount),
-      anchoredAt: new Date(Number(latest.anchoredAt) * 1000).toISOString(),
-    };
-  }
-  if (head) {
-    const [anchored] = await contract.isAnchored(head);
-    status.headAnchored = Boolean(anchored);
+  try {
+    const total: bigint = await withTimeout(contract.anchorCount(), "anchorCount");
+    if (Number(total) > 0) {
+      const latest = await withTimeout(contract.latestAnchor(), "latestAnchor");
+      status.latest = {
+        chainHead: latest.chainHead,
+        recordCount: Number(latest.recordCount),
+        anchoredAt: new Date(Number(latest.anchoredAt) * 1000).toISOString(),
+      };
+    }
+    if (head) {
+      const [anchored] = await withTimeout(contract.isAnchored(head), "isAnchored");
+      status.headAnchored = Boolean(anchored);
+    }
+  } catch (error: unknown) {
+    status.rpcError = error instanceof Error ? error.message : "Flare RPC unreachable.";
   }
   return status;
 }
@@ -126,11 +155,11 @@ export async function anchorLedger(): Promise<AnchorReceipt> {
   if (!head) throw new Error("Ledger is empty — register media before anchoring.");
 
   const contract = writeContract();
-  const [alreadyAnchored] = await contract.isAnchored(head);
+  const [alreadyAnchored] = await withTimeout(contract.isAnchored(head), "isAnchored");
   if (alreadyAnchored) throw new Error("Current chain head is already anchored on Flare.");
 
-  const tx = await contract.anchor(head, BigInt(count));
-  const receipt = await tx.wait();
+  const tx = await withTimeout(contract.anchor(head, BigInt(count)), "anchor");
+  const receipt = await withTimeout<{ blockNumber: number }>(tx.wait(), "confirmation");
 
   return {
     txHash: tx.hash,

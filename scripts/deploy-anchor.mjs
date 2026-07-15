@@ -44,9 +44,11 @@ const address = await contract.getAddress();
 console.log(`Deployed at: ${address}`);
 
 // Live smoke test: anchor a synthetic chain head and read it back.
+// recordCount 0 so the real ledger's first anchor (count >= 1) still satisfies
+// the contract's strictly-increasing rule.
 const testHead = "0x" + "ab".repeat(32);
 const anchored = new Contract(address, artifact.abi, wallet);
-const tx = await anchored.anchor(testHead, 1n);
+const tx = await anchored.anchor(testHead, 0n);
 const receipt = await tx.wait();
 const readBack = await anchored.isAnchored(testHead);
 console.log(`Smoke test: anchored in block ${receipt.blockNumber}, isAnchored → ${readBack}`);

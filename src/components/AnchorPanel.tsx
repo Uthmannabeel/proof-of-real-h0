@@ -57,6 +57,8 @@ export function AnchorPanel({ compact = false }: AnchorPanelProps) {
         Flare anchor:{" "}
         {status === null ? (
           "checking…"
+        ) : status.rpcError ? (
+          "on-chain status temporarily unavailable"
         ) : status.headAnchored && status.latest ? (
           <>
             <span className="text-[var(--color-stamp-green)] font-bold">
@@ -88,7 +90,7 @@ export function AnchorPanel({ compact = false }: AnchorPanelProps) {
             failing to match the on-chain head.
           </p>
         </div>
-        {status && (
+        {status && !status.rpcError && (
           <span
             className={`stamp ${status.headAnchored ? "stamp-green" : "stamp-amber"} shrink-0`}
           >
@@ -96,6 +98,12 @@ export function AnchorPanel({ compact = false }: AnchorPanelProps) {
           </span>
         )}
       </div>
+
+      {status?.rpcError && (
+        <p className="mono text-[0.78rem] text-[var(--color-ink-faint)] mt-3">
+          on-chain status temporarily unavailable — the Flare network could not be reached
+        </p>
+      )}
 
       {status?.latest && (
         <p className="mono text-[0.78rem] text-[var(--color-ink-faint)] mt-3">
@@ -112,7 +120,7 @@ export function AnchorPanel({ compact = false }: AnchorPanelProps) {
         </p>
       )}
 
-      {status?.configured && !status.headAnchored && status.currentCount > 0 && (
+      {status?.configured && !status.rpcError && !status.headAnchored && status.currentCount > 0 && (
         <button className="btn mt-4" disabled={isAnchoring} onClick={anchorNow} type="button">
           {isAnchoring ? "Anchoring…" : "Anchor ledger on Flare"}
         </button>

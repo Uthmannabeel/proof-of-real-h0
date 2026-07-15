@@ -1,0 +1,10 @@
+{
+  "network": "coston2",
+  "chainId": 114,
+  "address": "0x438bF0571f687991e8965Eb78ac3eC6A3D26768c",
+  "registrar": "0x8CCf5387B0A6A18826B4cF1a4388F6d40dEeaF27",
+  "deployTx": "0x4c4ac2ed0a0b4adce1da61aefe775d693132241db4a1b9ced4c24eeb6b92013a",
+  "smokeTestTx": "0x6809d7ee5e3fa509b3ebe2ef35c0d5b1fb6ea25f2c5cb8c3d41c3f3b28d1f376",
+  "deployedAt": "2026-07-15T19:11:56.716Z",
+  "explorer": "https://coston2-explorer.flare.network/address/0x438bF0571f687991e8965Eb78ac3eC6A3D26768c"
+}
