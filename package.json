@@ -12,6 +12,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1075.0",
     "@aws-sdk/lib-dynamodb": "^3.1075.0",
+    "@supabase/supabase-js": "^2.110.7",
     "ethers": "^6.17.0",
     "nanoid": "^5.1.16",
     "next": "16.2.9",

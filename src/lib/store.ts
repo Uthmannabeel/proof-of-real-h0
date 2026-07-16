@@ -22,16 +22,25 @@ export interface ProvenanceStore {
 let cached: ProvenanceStore | null = null;
 
 /**
- * Resolve the active store. Uses DynamoDB when DATA_BACKEND=dynamodb (or a
- * DYNAMODB_TABLE is configured), otherwise a local JSON file for zero-setup dev.
+ * Resolve the active store. Explicit DATA_BACKEND wins; otherwise infer from
+ * configured credentials (Supabase, then DynamoDB), falling back to a local
+ * JSON file for zero-setup dev.
  */
 export async function getStore(): Promise<ProvenanceStore> {
   if (cached) return cached;
 
   const backend =
-    process.env.DATA_BACKEND ?? (process.env.DYNAMODB_TABLE ? "dynamodb" : "local");
+    process.env.DATA_BACKEND ??
+    (process.env.SUPABASE_URL
+      ? "supabase"
+      : process.env.DYNAMODB_TABLE
+        ? "dynamodb"
+        : "local");
 
-  if (backend === "dynamodb") {
+  if (backend === "supabase") {
+    const { SupabaseStore } = await import("./supabase-store");
+    cached = new SupabaseStore();
+  } else if (backend === "dynamodb") {
     const { DynamoStore } = await import("./dynamo-store");
     cached = new DynamoStore();
   } else {
