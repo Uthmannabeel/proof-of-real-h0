@@ -22,5 +22,6 @@ in this repository's git history.
 | Jul 16 | Supabase production registry backend | 7fdbba7 |
 | Jul 18 | Telegram bot: send a photo → verdict | 41769f6 |
 | Jul 19 | Work ledger started; claims-verification build begins (see subsequent commits) | — |
+| Jul 19 | Confidential claim intake: in-enclave EXIF (GPS/time/camera) extraction, location + coverage-window checks, cross-claim perceptual fraud detection with same-policy re-upload exemption, hash-only claim records in the sealed ledger (`/api/claims`), FCC ActionResult settlement signing (EIP-191, ecrecover-compatible). Live-tested: fresh claim, same-policy retry, and a re-encoded copy on another policy caught at distance 1/64. | (this commit) |
 
 This ledger is updated with every substantial merge.

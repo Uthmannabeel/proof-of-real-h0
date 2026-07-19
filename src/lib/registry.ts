@@ -85,6 +85,62 @@ export async function registerMedia(input: RegisterInput): Promise<RegisterResul
   return { registration, alreadyRegistered: false };
 }
 
+export interface ClaimFingerprintInput {
+  policyId: number;
+  sha: string; // 64-char hex SHA-256 computed inside the enclave
+  phash: string; // 16-char hex perceptual hash computed inside the enclave
+}
+
+/**
+ * Record a claim's evidence fingerprint — hashes only, never the image, which
+ * stays inside the enclave. Claims live in the same sealed hash-chain ledger
+ * as registrations, so evidence reuse across claims is caught by the standard
+ * exact/near lookup and the whole claim history is anchorable to Flare.
+ */
+export async function registerClaimFingerprint(
+  input: ClaimFingerprintInput,
+): Promise<RegisterResult> {
+  const store = await getStore();
+  const sha = input.sha.toLowerCase();
+
+  const existing = await store.findByContentHash(sha);
+  if (existing) return { registration: existing, alreadyRegistered: true };
+
+  const now = new Date().toISOString();
+  const [head] = await store.list(1);
+  const prevHash = head?.recordHash ?? null;
+
+  const base = {
+    id: nanoid(12),
+    title: `Claim evidence — policy #${input.policyId}`,
+    registrant: `adjuster:policy:${input.policyId}`,
+    mediaType: "image" as const,
+    filename: "claim-evidence",
+    contentHash: sha,
+    phash: input.phash.toLowerCase(),
+    width: null,
+    height: null,
+    bytes: 0,
+    createdAt: now,
+    provenance: [{ at: now, action: "registered" as const, note: "enclave claim fingerprint" }],
+    prevHash,
+  };
+
+  const canonical = canonicalRecord(base);
+  const sealed = registrySealConfigured()
+    ? sealRecord(canonical)
+    : { seal: "", sealAlg: "none" as const };
+
+  const registration: Registration = {
+    ...base,
+    recordHash: recordHash(canonical),
+    ...sealed,
+  };
+
+  await store.put(registration);
+  return { registration, alreadyRegistered: false };
+}
+
 export interface LedgerAudit {
   total: number;
   sealed: number;

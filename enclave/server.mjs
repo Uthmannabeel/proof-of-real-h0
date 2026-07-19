@@ -11,6 +11,12 @@
 import { createServer } from "node:http";
 import { contentHash, perceptualHash } from "./hash.mjs";
 import { fetchAttestationToken, decodeClaims, inConfidentialSpace } from "./attestation.mjs";
+import { extractExif } from "./exif.mjs";
+import { runClaimChecks } from "./claim.mjs";
+import { encodeSettlement, signActionResult, teeWallet } from "./fcc.mjs";
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const TEE_WALLET = teeWallet();
 
 const PORT = Number(process.env.PORT ?? 8080);
 const REGISTRY_URL = (process.env.REGISTRY_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -124,6 +130,136 @@ async function handleVerify(req, res) {
   return json(res, 200, { success: true, data: { ...verdict, enclave } });
 }
 
+/**
+ * Confidential claim-evidence verification. The claimant's photo is read into
+ * enclave memory only: EXIF (GPS + capture time) is extracted, the registry is
+ * queried by hash for evidence reuse, and the verdict is signed in the FCC
+ * ActionResult format so ClaimPayout.sol can verify it with ecrecover.
+ *
+ * Query params: policyId (uint), lat, lon (decimal degrees), date (YYYY-MM-DD),
+ *               contract (0x… ClaimPayout address), maxKm?, windowDays?
+ */
+async function handleClaim(req, res, url) {
+  const type = (req.headers["content-type"] ?? "").split(";")[0].trim();
+  if (!ACCEPTED_TYPES.has(type)) {
+    return json(res, 400, {
+      success: false,
+      error: `Unsupported type "${type}". Use PNG, JPEG, WebP, or GIF.`,
+    });
+  }
+
+  const q = url.searchParams;
+  const policyId = q.get("policyId");
+  const lat = Number(q.get("lat"));
+  const lon = Number(q.get("lon"));
+  const date = q.get("date");
+  const contractAddr = q.get("contract") ?? ZERO_ADDRESS;
+  if (!/^\d+$/.test(policyId ?? "")) {
+    return json(res, 400, { success: false, error: "Query param 'policyId' must be a non-negative integer." });
+  }
+  if (Number.isNaN(lat) || Number.isNaN(lon)) {
+    return json(res, 400, { success: false, error: "Query params 'lat' and 'lon' must be decimal degrees." });
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
+    return json(res, 400, { success: false, error: "Query param 'date' must be YYYY-MM-DD." });
+  }
+
+  let buf;
+  try {
+    buf = await readBody(req);
+  } catch (error) {
+    return json(res, 413, { success: false, error: error.message });
+  }
+  if (buf.length === 0) return json(res, 400, { success: false, error: "Empty upload." });
+
+  // Fingerprint + EXIF in enclave memory only.
+  const sha = contentHash(buf);
+  let phash;
+  try {
+    phash = await perceptualHash(buf);
+  } catch {
+    return json(res, 400, { success: false, error: "Not a decodable image." });
+  }
+  const exif = await extractExif(buf);
+
+  // Hash-only reuse lookup — catches evidence recycled across claims.
+  let lookup;
+  try {
+    const lookupRes = await fetch(`${REGISTRY_URL}/api/lookup?sha=${sha}&phash=${phash}`);
+    lookup = await lookupRes.json();
+    if (!lookup.success) throw new Error(lookup.error ?? "Registry lookup failed.");
+  } catch (error) {
+    return json(res, 502, { success: false, error: `Registry unreachable: ${error.message}` });
+  }
+
+  const policy = {
+    policyId: Number(policyId),
+    lat,
+    lon,
+    date,
+    maxKm: q.get("maxKm") ? Number(q.get("maxKm")) : undefined,
+    windowDays: q.get("windowDays") ? Number(q.get("windowDays")) : undefined,
+  };
+  const verdict = runClaimChecks(exif, policy, lookup.data);
+
+  // Record the evidence fingerprint (hash only — never the image) so future
+  // claims reusing this photo are caught. Non-fatal if the registry declines.
+  let recorded = false;
+  try {
+    const rec = await fetch(`${REGISTRY_URL}/api/claims`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policyId: Number(policyId), sha, phash }),
+    });
+    recorded = (await rec.json()).success === true;
+  } catch {
+    recorded = false;
+  }
+
+  // Attestation bound to this exact file via nonce = SHA-256.
+  const token = await fetchAttestationToken(AUDIENCE, sha);
+  const claims = token ? decodeClaims(token) : null;
+  const enclave = {
+    attested: Boolean(token),
+    inConfidentialSpace: inConfidentialSpace(),
+    nonceBound: Boolean(token),
+    hwModel: claims?.hwmodel ?? null,
+    swName: claims?.swname ?? null,
+    imageDigest: claims?.submods?.container?.image_digest ?? null,
+    issuedAt: claims?.iat ? new Date(claims.iat * 1000).toISOString() : null,
+    token,
+  };
+
+  // Sign the settlement in the FCC ActionResult wire format.
+  const resultData = encodeSettlement({
+    contractAddr,
+    policyId,
+    evidenceSha256: sha,
+    evidenceOk: verdict.eligible,
+    reuseDetected: verdict.reuseDetected,
+    exifLat: exif.gpsLat,
+    exifLon: exif.gpsLon,
+    takenAt: exif.takenAt,
+  });
+  const fcc = await signActionResult(TEE_WALLET, resultData);
+
+  return json(res, 200, {
+    success: true,
+    data: {
+      policyId: Number(policyId),
+      eligible: verdict.eligible,
+      checks: verdict.checks,
+      distanceKm: verdict.distanceKm,
+      dayGap: verdict.dayGap,
+      exif: { ...exif, gpsLat: exif.gpsLat, gpsLon: exif.gpsLon },
+      evidenceSha256: sha,
+      recorded,
+      enclave,
+      fcc,
+    },
+  });
+}
+
 const server = createServer(async (req, res) => {
   try {
     if (req.method === "OPTIONS") {
@@ -137,11 +273,15 @@ const server = createServer(async (req, res) => {
           service: "proof-of-real-enclave",
           inConfidentialSpace: inConfidentialSpace(),
           registry: REGISTRY_URL,
+          teeAddress: TEE_WALLET.address,
         },
       });
     }
     if (req.method === "POST" && req.url === "/verify") {
       return await handleVerify(req, res);
+    }
+    if (req.method === "POST" && req.url?.startsWith("/claim")) {
+      return await handleClaim(req, res, new URL(req.url, `http://${req.headers.host}`));
     }
     return json(res, 404, { success: false, error: "Not found." });
   } catch (error) {
