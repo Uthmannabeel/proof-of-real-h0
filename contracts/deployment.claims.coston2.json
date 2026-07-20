@@ -1,9 +1,9 @@
 {
   "network": "coston2",
   "chainId": 114,
-  "claimPayout": "0x389b724F10C6c21693979B0A3a0116a9bc01c015",
+  "claimPayout": "0x8af8843C9F2474F0528970161bc4C1db62e3B8b9",
   "flareVtpmAttestation": "0xdf7fb88FcE2a9457a1a174845d702bF91aC8E19A",
-  "oidcVerifier": "0xE19D5180c956A9EEac4d228749a71cB165837cb9",
+  "oidcVerifier": "(reused, see prior deployment record)",
   "deployer": "0x8CCf5387B0A6A18826B4cF1a4388F6d40dEeaF27",
   "devTeeSigner": "0xeD00E334474d1fD573b0CaD8A808ab6EF9740d45",
   "confidentialSpaceConfig": {
@@ -14,6 +14,6 @@
     "secboot": true
   },
   "poolFundedC2FLR": "5",
-  "deployedAt": "2026-07-20T07:28:47.274Z",
-  "explorer": "https://coston2-explorer.flare.network/address/0x389b724F10C6c21693979B0A3a0116a9bc01c015"
+  "deployedAt": "2026-07-20T08:07:53.267Z",
+  "explorer": "https://coston2-explorer.flare.network/address/0x8af8843C9F2474F0528970161bc4C1db62e3B8b9"
 }

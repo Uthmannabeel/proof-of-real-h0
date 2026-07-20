@@ -220,7 +220,14 @@ contract ClaimPayout is Ownable {
 
         if (!ContractRegistry.getFdcVerification().verifyWeb2Json(proof)) revert InvalidFdcProof();
         if (proof.data.attestationType != WEB2JSON_TYPE) revert WrongAttestationType();
-        if (keccak256(bytes(proof.data.requestBody.url)) != keccak256(bytes(expectedUrl(policyId)))) {
+        // The attested request must be exactly this policy's canonical
+        // Open-Meteo query: bare archive URL + parameter JSON derived from the
+        // policy's stored location/date. Anything else is someone else's data.
+        if (
+            keccak256(bytes(proof.data.requestBody.url)) != keccak256(bytes(WEATHER_API_URL))
+                || keccak256(bytes(proof.data.requestBody.queryParams))
+                    != keccak256(bytes(expectedQueryParams(policyId)))
+        ) {
             revert RequestMismatch();
         }
 
@@ -248,19 +255,23 @@ contract ClaimPayout is Ownable {
         return policies.length;
     }
 
-    /// @notice The exact Open-Meteo archive URL this policy's weather proof must attest.
-    function expectedUrl(uint256 policyId) public view returns (string memory) {
+    /// @notice The bare weather API endpoint every policy's proof must attest.
+    string public constant WEATHER_API_URL = "https://archive-api.open-meteo.com/v1/archive";
+
+    /// @notice The exact queryParams JSON this policy's weather proof must
+    /// carry — byte-for-byte, key order fixed (matches scripts/fdc-weather.mjs).
+    function expectedQueryParams(uint256 policyId) public view returns (string memory) {
         Policy storage p = policies[policyId];
         return string.concat(
-            "https://archive-api.open-meteo.com/v1/archive?latitude=",
+            '{"latitude":"',
             p.lat,
-            "&longitude=",
+            '","longitude":"',
             p.lon,
-            "&start_date=",
+            '","start_date":"',
             p.date,
-            "&end_date=",
+            '","end_date":"',
             p.date,
-            "&daily=precipitation_sum&timezone=UTC"
+            '","daily":"precipitation_sum","timezone":"UTC"}'
         );
     }
 

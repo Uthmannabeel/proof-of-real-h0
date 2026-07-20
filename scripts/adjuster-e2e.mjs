@@ -42,9 +42,12 @@ const provider = new JsonRpcProvider(RPC, 114, { staticNetwork: true });
 const wallet = new Wallet(pk, provider);
 const claims = new Contract(CLAIMS_ADDR, abi, wallet);
 
-// --- 1. Buy a policy (threshold 5.00 mm rain, $5 payout, 0.1 C2FLR premium) ---
-console.log(`\n[1] buyPolicy(${date}, ${lat}, ${lon}, threshold 500 mmE2, payout $5.00)`);
-const buyTx = await claims.buyPolicy(date, lat, lon, 500n, 500n, { value: parseEther("0.1") });
+// --- 1. Buy a policy (threshold 5.00 mm rain, 0.1 C2FLR premium) ---
+// Payout in USD cents via argv (default $0.15 — FTSO-converted at settlement;
+// FLR ≈ $0.006 on Coston2's feed, so keep demo payouts small vs the pool).
+const payoutUsdE2 = BigInt(process.argv[6] ?? "15");
+console.log(`\n[1] buyPolicy(${date}, ${lat}, ${lon}, threshold 500 mmE2, payout $${(Number(payoutUsdE2) / 100).toFixed(2)})`);
+const buyTx = await claims.buyPolicy(date, lat, lon, 500n, payoutUsdE2, { value: parseEther("0.1") });
 const buyRcpt = await buyTx.wait();
 const policyId = (await claims.policyCount()) - 1n;
 console.log(`    policy #${policyId} bought in block ${buyRcpt.blockNumber}`);

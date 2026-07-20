@@ -70,24 +70,31 @@ async function deploy(name, ...args) {
   return { contract, address, abi: a.abi };
 }
 
-// 1. vTPM attestation registry with the Confidential Space base requirements.
-const c = CONFIDENTIAL_SPACE_CONFIG;
-const vtpm = await deploy(
-  "FlareVtpmAttestation",
-  c.hwmodel,
-  c.swname,
-  c.imageDigest,
-  c.iss,
-  c.secboot,
-);
-
-// 2. OIDC RS256 verifier, wired in as the "OIDC" token-type verifier.
-const oidc = await deploy("OidcSignatureVerification");
-await (await vtpm.contract.setTokenTypeVerifier(oidc.address)).wait();
-console.log("OIDC verifier registered on FlareVtpmAttestation");
+// 1+2. vTPM attestation registry + OIDC verifier — reused if already deployed
+// (pass FLARE_VTPM_ADDRESS in .env.local to skip), redeployed otherwise.
+let vtpmAddress = envLocal("FLARE_VTPM_ADDRESS");
+let oidcAddress = null;
+if (vtpmAddress) {
+  console.log(`Reusing FlareVtpmAttestation at ${vtpmAddress}`);
+} else {
+  const c = CONFIDENTIAL_SPACE_CONFIG;
+  const vtpm = await deploy(
+    "FlareVtpmAttestation",
+    c.hwmodel,
+    c.swname,
+    c.imageDigest,
+    c.iss,
+    c.secboot,
+  );
+  const oidc = await deploy("OidcSignatureVerification");
+  await (await vtpm.contract.setTokenTypeVerifier(oidc.address)).wait();
+  console.log("OIDC verifier registered on FlareVtpmAttestation");
+  vtpmAddress = vtpm.address;
+  oidcAddress = oidc.address;
+}
 
 // 3. ClaimPayout gated by the vTPM registry.
-const claims = await deploy("ClaimPayout", vtpm.address);
+const claims = await deploy("ClaimPayout", vtpmAddress);
 
 // Fund the payout pool.
 const fundTx = await wallet.sendTransaction({ to: claims.address, value: parseEther(POOL_FUND_C2FLR) });
@@ -106,14 +113,14 @@ await (await claims.contract.setDevSigner(teeAddress, true)).wait();
 console.log(`Dev signer registered: ${teeAddress}`);
 
 setEnvLocal("CLAIM_PAYOUT_ADDRESS", claims.address);
-setEnvLocal("FLARE_VTPM_ADDRESS", vtpm.address);
+setEnvLocal("FLARE_VTPM_ADDRESS", vtpmAddress);
 
 const deployment = {
   network: "coston2",
   chainId: 114,
   claimPayout: claims.address,
-  flareVtpmAttestation: vtpm.address,
-  oidcVerifier: oidc.address,
+  flareVtpmAttestation: vtpmAddress,
+  oidcVerifier: oidcAddress ?? "(reused, see prior deployment record)",
   deployer: wallet.address,
   devTeeSigner: teeAddress,
   confidentialSpaceConfig: CONFIDENTIAL_SPACE_CONFIG,
