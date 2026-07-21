@@ -55,10 +55,13 @@ console.log(`    policy #${policyId} bought in block ${buyRcpt.blockNumber}`);
 // --- 2. Confidential claim verification in the enclave ---
 console.log(`\n[2] enclave /claim — photo never leaves the TEE process`);
 const photo = readFileSync(photoPath);
-const res = await fetch(
-  `${ENCLAVE}/claim?policyId=${policyId}&lat=${lat}&lon=${lon}&date=${date}&contract=${CLAIMS_ADDR}`,
-  { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: photo },
-);
+// No lat/lon/date supplied — the enclave reads the policy's insured terms
+// from the contract itself (the caller cannot tailor them to the photo).
+const res = await fetch(`${ENCLAVE}/claim?policyId=${policyId}&contract=${CLAIMS_ADDR}`, {
+  method: "POST",
+  headers: { "Content-Type": "image/jpeg" },
+  body: photo,
+});
 const body = await res.json();
 if (!body.success) throw new Error(`enclave: ${body.error}`);
 const d = body.data;

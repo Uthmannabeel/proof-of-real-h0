@@ -17,6 +17,25 @@ import { encodeSettlement, signActionResult, teeWallet } from "./fcc.mjs";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const TEE_WALLET = teeWallet();
+const FLARE_RPC = process.env.FLARE_RPC_URL ?? "https://coston2-api.flare.network/ext/C/rpc";
+
+// Minimal read surface of ClaimPayout — the enclave verifies evidence against
+// what the CONTRACT says the policy insures, never against caller-supplied
+// coordinates (a caller could otherwise tailor the "policy" to their photo).
+const POLICY_ABI = [
+  "function policies(uint256) view returns (address holder, string date, string lat, string lon,"
+  + " uint256 rainThresholdMmE2, uint256 payoutUsdE2, uint256 premiumWei, bool evidenceApproved,"
+  + " bool evidenceAttested, bytes32 evidenceHash, bool settled, bool paidOut, uint256 paidWei)",
+];
+
+async function readPolicyFromChain(contractAddr, policyId) {
+  const { Contract, JsonRpcProvider } = await import("ethers");
+  const provider = new JsonRpcProvider(FLARE_RPC, 114, { staticNetwork: true });
+  const contract = new Contract(contractAddr, POLICY_ABI, provider);
+  const p = await contract.policies(policyId);
+  if (p.holder === ZERO_ADDRESS) throw new Error(`policy ${policyId} does not exist on ${contractAddr}`);
+  return { lat: Number(p.lat), lon: Number(p.lon), date: p.date };
+}
 
 const PORT = Number(process.env.PORT ?? 8080);
 const REGISTRY_URL = (process.env.REGISTRY_URL ?? "http://localhost:3000").replace(/\/$/, "");
@@ -150,18 +169,34 @@ async function handleClaim(req, res, url) {
 
   const q = url.searchParams;
   const policyId = q.get("policyId");
-  const lat = Number(q.get("lat"));
-  const lon = Number(q.get("lon"));
-  const date = q.get("date");
   const contractAddr = q.get("contract") ?? ZERO_ADDRESS;
   if (!/^\d+$/.test(policyId ?? "")) {
     return json(res, 400, { success: false, error: "Query param 'policyId' must be a non-negative integer." });
   }
-  if (Number.isNaN(lat) || Number.isNaN(lon)) {
-    return json(res, 400, { success: false, error: "Query params 'lat' and 'lon' must be decimal degrees." });
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
-    return json(res, 400, { success: false, error: "Query param 'date' must be YYYY-MM-DD." });
+
+  // Policy terms come from the chain when a contract is given (the signed
+  // settlement binds to it). Caller-supplied lat/lon/date are accepted ONLY
+  // in standalone mode (contract = zero address) — such results are unusable
+  // on a real contract, which rejects foreign contractAddr values.
+  let lat;
+  let lon;
+  let date;
+  if (contractAddr !== ZERO_ADDRESS) {
+    try {
+      ({ lat, lon, date } = await readPolicyFromChain(contractAddr, policyId));
+    } catch (error) {
+      return json(res, 400, { success: false, error: `Policy lookup failed: ${error.message}` });
+    }
+  } else {
+    lat = Number(q.get("lat"));
+    lon = Number(q.get("lon"));
+    date = q.get("date");
+    if (Number.isNaN(lat) || Number.isNaN(lon)) {
+      return json(res, 400, { success: false, error: "Query params 'lat' and 'lon' must be decimal degrees." });
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "")) {
+      return json(res, 400, { success: false, error: "Query param 'date' must be YYYY-MM-DD." });
+    }
   }
 
   let buf;
