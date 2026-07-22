@@ -11,6 +11,9 @@
   --color-stamp-green: #1f7a4d;
   --color-stamp-red: #b02a1f;
   --color-stamp-amber: #a9781b;
+  /* Carbon-copy blue — the ink of duplicate insurance forms. Reserved for
+     LIVE / in-progress states so the verdict stamps keep their meaning. */
+  --color-carbon: #2b4a8b;
 
   --font-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
   --font-mono: ui-monospace, "Geist Mono", "SF Mono", "Cascadia Code", Menlo, monospace;
@@ -105,5 +108,109 @@ body {
   }
   .btn-ghost:hover:not(:disabled) {
     background-color: var(--color-paper-2);
+  }
+
+  /* ── Evidence chain — the claim file's spine ─────────────────────────
+     A vertical docket that fills in live as a claim moves:
+     photo → enclave → chain → weather → payout. */
+  .chain {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .chain-station {
+    position: relative;
+    padding-left: 2.4rem;
+    padding-bottom: 1.6rem;
+  }
+  .chain-station:last-child {
+    padding-bottom: 0.25rem;
+  }
+  /* connecting line to the NEXT station */
+  .chain-station::before {
+    content: "";
+    position: absolute;
+    left: 0.62rem;
+    top: 1.5rem;
+    bottom: -0.1rem;
+    width: 2px;
+    background-color: var(--color-rule);
+  }
+  .chain-station:last-child::before {
+    display: none;
+  }
+  .chain-station.is-done::before {
+    background-color: var(--color-ink);
+  }
+  .chain-station.is-active::before {
+    background: repeating-linear-gradient(
+      to bottom,
+      var(--color-carbon) 0 5px,
+      transparent 5px 10px
+    );
+  }
+  .chain-marker {
+    position: absolute;
+    left: 0;
+    top: 0.05rem;
+    width: 1.35rem;
+    height: 1.35rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1;
+    border: 2px solid var(--color-rule);
+    border-radius: 9999px;
+    background-color: var(--color-paper);
+    color: var(--color-ink-faint);
+  }
+  .is-done .chain-marker {
+    border-color: var(--color-ink);
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+  }
+  .is-active .chain-marker {
+    border-color: var(--color-carbon);
+    color: var(--color-carbon);
+    animation: chain-pulse 1.6s ease-in-out infinite;
+  }
+  .is-failed .chain-marker {
+    border-color: var(--color-stamp-red);
+    color: var(--color-stamp-red);
+  }
+  .chain-title {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .is-active .chain-title {
+    color: var(--color-carbon);
+  }
+  .is-pending .chain-title,
+  .is-pending .chain-body {
+    color: var(--color-ink-faint);
+  }
+  .is-failed .chain-title {
+    color: var(--color-stamp-red);
+  }
+}
+
+@keyframes chain-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(43, 74, 139, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(43, 74, 139, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .is-active .chain-marker {
+    animation: none;
   }
 }

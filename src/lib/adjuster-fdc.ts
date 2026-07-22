@@ -1,5 +1,8 @@
 import { AbiCoder, Contract, JsonRpcProvider, Wallet, hexlify, toUtf8Bytes, zeroPadBytes } from "ethers";
 import { explorerTx } from "./adjuster";
+import type { SettlementPoll, SettlementTicket } from "./adjuster-types";
+
+export type { SettlementPoll, SettlementTicket };
 
 /**
  * FDC Web2Json settlement, serverless-shaped: `startSettlement` submits the
@@ -31,7 +34,12 @@ const CLAIMS_MIN_ABI = [
   "function policies(uint256) view returns (address holder, string date, string lat, string lon,"
   + " uint256 rainThresholdMmE2, uint256 payoutUsdE2, uint256 premiumWei, bool evidenceApproved,"
   + " bool evidenceAttested, bytes32 evidenceHash, bool settled, bool paidOut, uint256 paidWei)",
-  "function settle(uint256 policyId, ((bytes32[]),(bytes32,bytes32,uint64,uint64,(string,string,string,string,string,string,string),(bytes))) proof)",
+  // Components must be NAMED — ethers cannot map object arguments (the
+  // { merkleProof, data } proof) onto unnamed tuple components.
+  "function settle(uint256 policyId, (bytes32[] merkleProof, (bytes32 attestationType, bytes32 sourceId,"
+  + " uint64 votingRound, uint64 lowestUsedTimestamp, (string url, string httpMethod, string headers,"
+  + " string queryParams, string body, string postProcessJq, string abiSignature) requestBody,"
+  + " (bytes abiEncodedData) responseBody) data) proof)",
   "event Settled(uint256 indexed policyId, uint256 precipitationMmE2, bool triggered, uint256 paidWei, bool evidenceAttested)",
 ];
 
@@ -69,13 +77,6 @@ function claims(signed = false): Contract {
 }
 
 const toUtf8Hex32 = (s: string) => zeroPadBytes(hexlify(toUtf8Bytes(s)), 32);
-
-export interface SettlementTicket {
-  policyId: number;
-  roundId: number;
-  abiEncodedRequest: string;
-  submitTxUrl: string;
-}
 
 /** Step 1: prepare the attestation request and submit it to FdcHub. */
 export async function startSettlement(policyId: number): Promise<SettlementTicket> {
@@ -129,19 +130,6 @@ export async function startSettlement(policyId: number): Promise<SettlementTicke
 
   return { policyId, roundId, abiEncodedRequest, submitTxUrl: explorerTx(tx.hash) };
 }
-
-export type SettlementPoll =
-  | { state: "waiting-finalization" }
-  | { state: "waiting-proof" }
-  | {
-      state: "settled";
-      precipitationMmE2: number;
-      triggered: boolean;
-      paidWei: string;
-      evidenceAttested: boolean;
-      txUrl: string;
-      proofRound: number;
-    };
 
 /** Step 2 (repeat until settled): check finalization, fetch proof, settle. */
 export async function pollSettlement(ticket: SettlementTicket): Promise<SettlementPoll> {

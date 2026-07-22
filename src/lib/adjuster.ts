@@ -1,4 +1,7 @@
 import { Contract, JsonRpcProvider, Wallet, formatEther, parseEther } from "ethers";
+import type { AdjusterPolicy, FccSettlement } from "./adjuster-types";
+
+export type { AdjusterPolicy, FccSettlement };
 
 /**
  * Adjuster chain access — server-side helpers over the ClaimPayout contract
@@ -20,30 +23,16 @@ const CLAIMS_ABI = [
   + " bool evidenceAttested, bytes32 evidenceHash, bool settled, bool paidOut, uint256 paidWei)",
   "function buyPolicy(string date, string lat, string lon, uint256 rainThresholdMmE2, uint256 payoutUsdE2) payable returns (uint256)",
   "function submitEvidence(bytes resultData, bytes32 actionId, string submissionTag, uint8 status, bytes signature)",
-  "function settle(uint256 policyId, ((bytes32[]),(bytes32,bytes32,uint64,uint64,(string,string,string,string,string,string,string),(bytes))) proof)",
+  "function settle(uint256 policyId, (bytes32[] merkleProof, (bytes32 attestationType, bytes32 sourceId,"
+  + " uint64 votingRound, uint64 lowestUsedTimestamp, (string url, string httpMethod, string headers,"
+  + " string queryParams, string body, string postProcessJq, string abiSignature) requestBody,"
+  + " (bytes abiEncodedData) responseBody) data) proof)",
   "function WEATHER_API_URL() view returns (string)",
   "function expectedQueryParams(uint256) view returns (string)",
   "function devSigners(address) view returns (bool)",
   "event EvidenceAccepted(uint256 indexed policyId, bytes32 evidenceHash, bool attested, address signer)",
   "event Settled(uint256 indexed policyId, uint256 precipitationMmE2, bool triggered, uint256 paidWei, bool evidenceAttested)",
 ];
-
-export interface AdjusterPolicy {
-  policyId: number;
-  holder: string;
-  date: string;
-  lat: string;
-  lon: string;
-  rainThresholdMmE2: number;
-  payoutUsdE2: number;
-  premiumWei: string;
-  evidenceApproved: boolean;
-  evidenceAttested: boolean;
-  evidenceHash: string;
-  settled: boolean;
-  paidOut: boolean;
-  paidWei: string;
-}
 
 export function adjusterConfigured(): boolean {
   return Boolean(process.env.CLAIM_PAYOUT_ADDRESS && process.env.FLARE_DEPLOYER_PRIVATE_KEY);
@@ -159,12 +148,12 @@ export async function buyPolicy(input: {
   return { policyId, txHash: tx.hash, txUrl: explorerTx(tx.hash) };
 }
 
-export interface FccSettlement {
-  resultData: string;
-  actionId: string;
-  submissionTag: string;
-  status: number;
-  signature: string;
+/** Native-token balance of the payout pool (the contract's own balance). */
+export async function poolBalanceWei(): Promise<string> {
+  const address = process.env.CLAIM_PAYOUT_ADDRESS;
+  if (!address) throw new Error("CLAIM_PAYOUT_ADDRESS is not configured.");
+  const balance = await withTimeout(provider().getBalance(address), "poolBalance");
+  return balance.toString();
 }
 
 /** Relay the enclave's FCC-signed evidence settlement on-chain. */

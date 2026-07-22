@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Proof of Real — Media Authenticity Registry",
+  title: "Adjuster — Confidential parametric insurance on Flare",
   description:
-    "Register original photos and videos to a tamper-evident public ledger, then verify any image to see if it is a registered original or an altered copy.",
+    "File a flood claim from a single photograph: verified in a confidential enclave, weather attested by Flare's Data Connector, paid out on-chain in minutes.",
 };
 
 export default function RootLayout({
